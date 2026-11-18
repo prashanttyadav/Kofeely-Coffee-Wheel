@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kofeely Coffee Discount Wheel</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header><img class="logo" src="logo.jpeg" alt="Kofeely Coffee"><h1>Kofeely Coffee Discount Wheel</h1></header>
+<main>
+  <section id="pinBox" class="card">
+    <h2>Enter PIN</h2>
+    <p class="muted">Enter the PIN shown at the cart to spin the wheel. Each customer gets one spin.</p>
+    <input id="pin" inputmode="numeric" autocomplete="off" placeholder="PIN">
+    <button id="go">Continue</button>
+    <p id="err" class="err" role="alert"></p>
+    <p class="center muted"><a href="admin.html">Admin login</a></p>
+  </section>
+  <section id="spinBox" class="card" hidden>
+    <div class="wheel-wrap"><div class="pointer"></div><canvas id="wheel" width="640" height="640"></canvas><div class="hub"></div></div>
+    <button id="spin">Spin the wheel</button>
+    <p id="serr" class="err" role="alert"></p>
+  </section>
+  <section id="resultBox" class="card" hidden>
+    <div class="win" id="win"></div>
+    <div class="code" id="code"></div>
+    <p class="muted center" id="note"></p>
+    <h2>All offers</h2>
+    <ol class="offers" id="all"></ol>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const api=async(u,b)=>{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return await r.json()};
+// Wheel shows only segment numbers 1-10; offer names stay hidden until the spin is complete.
+const cv=$('wheel'),c=cv.getContext('2d'),N=10,S=2*Math.PI/N;
+c.translate(320,320);
+for(let i=0;i<N;i++){
+  c.beginPath();c.moveTo(0,0);c.arc(0,0,320,-Math.PI/2+i*S,-Math.PI/2+(i+1)*S);
+  c.fillStyle=i%2?'#a8693a':'#3e1d0e';c.fill();
+  c.save();c.rotate(i*S+S/2);c.fillStyle='#fff';c.font='bold 52px system-ui,sans-serif';c.textAlign='center';c.fillText(i+1,0,-230);c.restore();
+}
+let pin='';
+function show(d,again){
+  $('pinBox').hidden=true;$('spin').hidden=true;$('serr').textContent='';$('spinBox').hidden=again;
+  $('win').textContent=d.label;$('code').textContent=d.code;
+  $('note').textContent=(again?'You have already spun. ':'')+'Show this screen at the cart to claim your offer.';
+  $('all').replaceChildren(...d.offers.map((o,i)=>{const li=document.createElement('li'),n=document.createElement('b');
+    n.textContent=i+1;li.append(n,o);if(i===d.index)li.className='hit';return li}));
+  $('resultBox').hidden=false;
+}
+$('go').onclick=async()=>{
+  pin=$('pin').value.trim();const r=await api('/api/check',{pin});
+  if(!r.ok){$('err').textContent=r.error||'Something went wrong';return}
+  $('pinBox').hidden=true;
+  if(r.result)show(r.result,true);else $('spinBox').hidden=false;
+};
+$('spin').onclick=async()=>{
+  $('spin').disabled=true;const r=await api('/api/spin',{pin});
+  if(!r.ok){if(r.result)return show(r.result,true);$('spin').disabled=false;$('serr').textContent=r.error;return}
+  const rot=360*6-(r.result.index+.5)*36+(Math.random()*20-10);
+  cv.style.transform=`rotate(${rot}deg)`;
+  setTimeout(()=>show(r.result,false),5400);
+};
+</script></body></html>
