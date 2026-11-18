@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kofeely Coffee Discount Wheel - Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<header><img class="logo" src="logo.jpeg" alt="Kofeely Coffee"><h1>Kofeely Coffee Discount Wheel</h1></header>
+<main>
+  <section id="login" class="card">
+    <h2>Admin login</h2>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="in">Log in</button>
+    <p id="lerr" class="err" role="alert"></p>
+    <p class="center muted"><a href="index.html">Back to customer page</a></p>
+  </section>
+  <div id="panel" hidden>
+    <section class="card"><h2>Spin PIN</h2>
+      <p class="muted">Customers must enter this PIN before they can spin.</p>
+      <input id="apin" autocomplete="off"></section>
+    <section class="card"><h2>10 offers</h2>
+      <p class="muted">Name each offer and set how many times it should come up in every 100 spins. The total must be 100.</p>
+      <div id="rows"></div><p id="tot" class="tot"></p>
+      <button id="save">Save PIN and offers</button><p id="msg" class="err" role="status"></p></section>
+    <section class="card"><h2>Change admin password</h2>
+      <input id="cp" type="password" placeholder="Current password" autocomplete="current-password">
+      <input id="np" type="password" placeholder="New password (min 8 characters)" autocomplete="new-password">
+      <input id="np2" type="password" placeholder="Confirm new password" autocomplete="new-password">
+      <button id="chg">Change password</button><p id="pmsg" class="err" role="status"></p></section>
+    <section class="card"><h2>Spin record</h2>
+      <p id="stat"></p><ul id="recent" class="recent"></ul>
+      <button id="reset" class="ghost">Reset all spins</button>
+      <button id="out" class="ghost">Log out</button></section>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let token=sessionStorage.getItem('kt')||'';
+const api=async(m,u,b)=>{const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:b?JSON.stringify(b):undefined});
+  const d=await r.json();if(r.status===401&&token){logout()}return{ok:r.ok,...d}};
+function logout(){token='';sessionStorage.removeItem('kt');$('panel').hidden=true;$('login').hidden=false}
+function total(){const t=[...document.querySelectorAll('.w')].reduce((a,i)=>a+(Number(i.value)||0),0);
+  $('tot').textContent='Total: '+t+' / 100';$('tot').className='tot '+(t===100?'good':'bad');$('save').disabled=t!==100}
+async function load(){
+  const d=await api('GET','/api/admin/data');if(!d.ok)return;
+  $('login').hidden=true;$('panel').hidden=false;$('apin').value=d.pin;
+  $('rows').replaceChildren(...d.offers.map((o,i)=>{const r=document.createElement('div');r.className='row';
+    r.innerHTML='<b></b><input class="lab" maxlength="40" aria-label="Offer name"><input class="w" type="number" min="0" max="100" step="1" aria-label="Times per 100 spins">';
+    r.firstChild.textContent=i+1;r.querySelector('.lab').value=o.label;r.querySelector('.w').value=o.weight;
+    r.querySelector('.w').oninput=total;return r}));
+  total();$('stat').textContent='Total spins so far: '+d.total;
+  $('recent').replaceChildren(...d.recent.map(s=>{const li=document.createElement('li');
+    li.textContent=new Date(s.at).toLocaleString('en-IN')+' - '+s.label+' ('+s.code+')';return li}));
+}
+$('in').onclick=async()=>{
+  const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('pw').value})});
+  const d=await r.json();if(!r.ok){$('lerr').textContent=d.error;return}
+  token=d.token;sessionStorage.setItem('kt',token);$('pw').value='';load();
+};
+$('save').onclick=async()=>{
+  const offers=[...document.querySelectorAll('.row')].map(r=>({label:r.querySelector('.lab').value,weight:r.querySelector('.w').value}));
+  const d=await api('PUT','/api/admin/data',{pin:$('apin').value,offers});
+  $('msg').style.color=d.ok?'var(--ok)':'var(--bad)';$('msg').textContent=d.ok?'Saved':d.error;
+};
+$('chg').onclick=async()=>{
+  const m=(t,ok)=>{$('pmsg').style.color=ok?'var(--ok)':'var(--bad)';$('pmsg').textContent=t};
+  if($('np').value!==$('np2').value)return m('New passwords do not match');
+  const d=await api('POST','/api/admin/password',{current:$('cp').value,next:$('np').value});
+  if(!d.ok)return m(d.error);
+  token=d.token;sessionStorage.setItem('kt',token);['cp','np','np2'].forEach(i=>$(i).value='');m('Password changed',1);
+};
+$('reset').onclick=async()=>{if(confirm('Reset all spins? Every customer will be able to spin again.')){await api('POST','/api/admin/reset');load()}};
+$('out').onclick=logout;
+if(token)load();
+</script></body></html>
